@@ -11,10 +11,10 @@ interface PageProps {
   searchParams: Promise<{ days?: string; focus?: string }>;
 }
 
-export default async function DashboardPage({ searchParams }: PageProps) {
-  const resolvedParams = await searchParams;
-  const days = Math.min(parseInt(resolvedParams.days ?? "90"), 120);
-  const focus = resolvedParams.focus?.toLowerCase() ?? null;
+export default async function DashboardPage(props: PageProps) {
+  const { days: daysParam, focus: focusParam } = await props.searchParams;
+  const days = Math.min(parseInt(daysParam ?? "90"), 120);
+  const focus = focusParam?.toLowerCase() ?? null;
 
   const from = new Date();
   from.setDate(from.getDate() - days);
