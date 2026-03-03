@@ -7,6 +7,9 @@ interface Props {
 }
 
 export function EngineerHeader({ login, summary }: Props) {
+  const avgPiuPerPr =
+    summary.n_prs > 0 ? summary.composite_score / summary.n_prs : 0;
+
   return (
     <div className="flex items-start gap-5">
       <img
@@ -32,7 +35,11 @@ export function EngineerHeader({ login, summary }: Props) {
 
         <p className="text-sm text-slate-500 mt-2 leading-none">
           <strong className="text-slate-700 font-semibold">{summary.n_prs}</strong> PRs ·{" "}
-          <strong className="text-slate-700 font-semibold">{summary.n_reviews}</strong> reviews
+          <strong className="text-slate-700 font-semibold">{summary.n_reviews}</strong> reviews ·{" "}
+          <strong className="text-slate-700 font-semibold">
+            {avgPiuPerPr.toFixed(1)}
+          </strong>{" "}
+          avg PIUs per PR
         </p>
         <div className="mt-3 inline-flex px-3 py-1 rounded-full bg-slate-50 border border-slate-200">
           <span className="text-[11px] text-slate-600">

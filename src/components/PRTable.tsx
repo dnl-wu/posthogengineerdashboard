@@ -126,6 +126,9 @@ export function PRTable({ evidence, sort, onSortChange }: Props) {
           </svg>
           Evidence PRs ({evidence.length})
         </h3>
+        <span className="text-[10px] font-medium text-slate-400 tracking-wider">
+          Interact for details
+        </span>
       </div>
 
       {/* Rows */}

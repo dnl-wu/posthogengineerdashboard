@@ -35,6 +35,33 @@ export function ScoreBreakdownBar({ summary }: Props) {
       ? "vs team avg —"
       : `${delta >= 0 ? "+" : ""}${delta.toFixed(1)} vs avg`;
 
+  const stats = [
+    {
+      key: "pr" as const,
+      label: "PR Impact",
+      value: summary.avg_pr_score,
+      sub: formatDelta(prDelta),
+      color: "#FF9500", // System Orange
+      max: 100,
+    },
+    {
+      key: "rev" as const,
+      label: "Review Influence",
+      value: summary.avg_review_score,
+      sub: formatDelta(revDelta),
+      color: "#AF52DE", // System Purple
+      max: 100,
+    },
+    {
+      key: "pct" as const,
+      label: "Percentile",
+      value: summary.avg_percentile ?? 0,
+      sub: "composite rank",
+      color: "#007AFF", // System Blue
+      max: 100,
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       {/* Stacked composite bar */}
@@ -98,29 +125,7 @@ export function ScoreBreakdownBar({ summary }: Props) {
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        {[
-          {
-            label: "PR Impact",
-            value: summary.avg_pr_score.toFixed(1),
-            sub: formatDelta(prDelta),
-            color: "#FF9500", // System Orange
-            max: 100
-          },
-          {
-            label: "Review Influence",
-            value: summary.avg_review_score.toFixed(1),
-            sub: formatDelta(revDelta),
-            color: "#AF52DE", // System Purple
-            max: 100
-          },
-          {
-            label: "Percentile",
-            value: `P${Math.round(summary.avg_percentile ?? 0)}`,
-            sub: "composite rank",
-            color: "#007AFF", // System Blue
-            max: 100
-          },
-        ].map((stat) => (
+        {stats.map((stat) => (
           <div
             key={stat.label}
             className="bg-slate-50/80 rounded-[16px] p-3 ring-1 ring-slate-900/5 flex flex-col gap-1.5"
@@ -132,14 +137,26 @@ export function ScoreBreakdownBar({ summary }: Props) {
               {stat.label}
             </span>
             <span className="text-xl font-semibold text-slate-900 leading-none tabular-nums tracking-tight">
-              {stat.value}
+              {stat.key === "pct"
+                ? `P${Math.round(stat.value)}`
+                : `${stat.value.toFixed(1)}%`}
             </span>
             <div className="flex items-center gap-2 mt-0.5">
-              <MiniBar value={parseFloat(stat.value) || 0} color={stat.color} max={stat.max} />
+              <MiniBar value={stat.value || 0} color={stat.color} max={stat.max} />
               <span className="text-[10px] font-medium text-slate-500 shrink-0 tabular-nums">
                 {stat.sub}
               </span>
             </div>
+            {stat.label === "PR Impact" && (
+              <span className="text-[10px] text-slate-500 mt-0.5">
+                This is the average impact their PR is responsible for when this engineer is involved in a given impactful change.
+              </span>
+            )}
+            {stat.label === "Review Influence" && (
+              <span className="text-[10px] text-slate-500 mt-0.5">
+                This is the average impact their review is responsible for when this engineer is involved in a given impactful change.
+              </span>
+            )}
           </div>
         ))}
       </div>
