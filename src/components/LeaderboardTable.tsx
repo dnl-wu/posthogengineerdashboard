@@ -19,6 +19,7 @@ export function LeaderboardTable({ engineers, focusLogin }: Props) {
   const searchParams = useSearchParams();
   const days = searchParams.get("days") ?? "90";
   const maxScore = Math.max(engineers[0]?.raw_composite ?? 1, 1);
+  const totalEngineers = engineers.length || 1;
 
   const [activeLogin, setActiveLogin] = useState<string | null>(
     focusLogin ?? engineers[0]?.author_login ?? null,
@@ -37,7 +38,7 @@ export function LeaderboardTable({ engineers, focusLogin }: Props) {
   }
 
   return (
-    <section className="col-span-4 bg-white rounded-[24px] ring-1 ring-slate-900/5 shadow-sm flex flex-col min-h-0 overflow-hidden">
+    <section className="col-span-4 bg-white rounded-[24px] ring-1 ring-slate-900/5 shadow-sm flex flex-col min-h-[420px] overflow-hidden">
       
       {/* Header */}
       <div className="px-5 py-4 border-b border-slate-900/5 shrink-0 flex justify-between items-baseline bg-slate-50/50">
@@ -51,8 +52,12 @@ export function LeaderboardTable({ engineers, focusLogin }: Props) {
 
       {/* List */}
       <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
-        {engineers.map((eng) => {
+        {engineers.map((eng, index) => {
           const isActive = eng.author_login === activeLogin;
+          const percentile =
+            totalEngineers > 1
+              ? 100 - (index / (totalEngineers - 1)) * 100
+              : 100;
           
           // Vibrant HIG colors for active, subdued System Grays for inactive
           const prColor = isActive ? HIG_ORANGE : HIG_GRAY_4;
@@ -144,11 +149,9 @@ export function LeaderboardTable({ engineers, focusLogin }: Props) {
                   <span className="flex items-center gap-1">
                     <span className="font-semibold text-slate-700">{eng.n_reviews_given}</span> Reviews
                   </span>
-                  {eng.avg_percentile != null && (
-                    <span className="flex items-center gap-1 ml-auto">
-                      P<span className="font-semibold text-slate-700">{Math.round(eng.avg_percentile)}</span>
-                    </span>
-                  )}
+                  <span className="flex items-center gap-1 ml-auto">
+                    P<span className="font-semibold text-slate-700">{Math.round(percentile)}</span>
+                  </span>
                 </div>
               </div>
             </div>

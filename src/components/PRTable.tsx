@@ -135,11 +135,6 @@ export function PRTable({ evidence, sort, onSortChange }: Props) {
           const impactScore = boostScore(ev.impact_score ?? null, ev.pr_id, "impact");
           const deliveryScore = boostScore(ev.delivery_score ?? null, ev.pr_id, "delivery");
           const breadthScore = boostScore(ev.breadth_score ?? null, ev.pr_id, "breadth");
-          const userFacingScore = boostScore(
-            ev.user_facing_score != null ? ev.user_facing_score / 100 : null,
-            ev.pr_id,
-            "user_facing",
-          );
           const complexityScore = boostScore(
             ev.complexity_score != null ? ev.complexity_score / 100 : null,
             ev.pr_id,
@@ -170,7 +165,7 @@ export function PRTable({ evidence, sort, onSortChange }: Props) {
                   </p>
                   <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
                     {ev.pr_number ? `#${ev.pr_number}` : ev.pr_id} ·{" "}
-                    {(ev.raw_pr_score * 100).toFixed(0)}% Shipping Impact
+                    {(ev.raw_pr_score * 100).toFixed(0)}% Individual shipping Impact
                   </p>
                 </div>
 
@@ -226,7 +221,7 @@ export function PRTable({ evidence, sort, onSortChange }: Props) {
                     </div>
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Shipping Impact
+                        Individual shipping Impact
                       </span>
                       <span className="font-bold text-[#EC6341]">
                         {(ev.raw_pr_score * 100).toFixed(0)}%
@@ -242,6 +237,11 @@ export function PRTable({ evidence, sort, onSortChange }: Props) {
                           ? `${(impactScore * 100).toFixed(0)}/100 from user + business impact`
                           : "—"}
                       </span>
+                      {ev.user_facing_score != null && (
+                        <span className="text-[10px] text-slate-500">
+                          Higher weight is given when changes are more visible to end users.
+                        </span>
+                      )}
                     </div>
                     <div className="flex flex-col gap-0.5">
                       <span className="font-semibold text-slate-600">Delivery</span>
@@ -256,16 +256,6 @@ export function PRTable({ evidence, sort, onSortChange }: Props) {
                       <span>
                         {breadthScore != null
                           ? `${(breadthScore * 100).toFixed(0)}/100 from how cross‑cutting the change is`
-                          : "—"}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-semibold text-slate-600">User‑facing</span>
-                      <span>
-                        {userFacingScore != null
-                          ? `${(userFacingScore * 100).toFixed(
-                              0,
-                            )}/100 emphasis on visible user impact`
                           : "—"}
                       </span>
                     </div>
@@ -296,9 +286,9 @@ export function PRTable({ evidence, sort, onSortChange }: Props) {
                   </div>
 
                   <p className="text-[11px] text-slate-500 leading-snug">
-                    Shipping Impact is a 0–100 score combining these dimensions; multiplied by this
-                    PR&apos;s PIUs, it contributes to the engineer&apos;s total Product Impact Units over
-                    the last 90 days.
+                    Individual shipping Impact is a 0–100 score combining these dimensions; multiplied
+                    by this PR&apos;s PIUs, it contributes to the engineer&apos;s total Product Impact
+                    Units over the last 90 days.
                   </p>
 
                   {ev.github_url && (

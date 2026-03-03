@@ -36,9 +36,9 @@ export function ScoreBreakdownBar({ summary }: Props) {
       : `${delta >= 0 ? "+" : ""}${delta.toFixed(1)} vs avg`;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {/* Stacked composite bar */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-slate-800 tracking-tight">
             Score Breakdown
@@ -49,7 +49,7 @@ export function ScoreBreakdownBar({ summary }: Props) {
         </div>
         
         {/* Main Stacked Bar */}
-        <div className="flex w-full h-3 rounded-full overflow-hidden bg-slate-100 shadow-inner">
+        <div className="flex w-full h-2.5 rounded-full overflow-hidden bg-slate-100 shadow-inner">
           <div
             className="h-full transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)]"
             style={{ width: `${prPct}%`, backgroundColor: "#FF9500" }}
@@ -63,7 +63,7 @@ export function ScoreBreakdownBar({ summary }: Props) {
         </div>
         
         {/* Legend */}
-        <div className="flex items-center justify-between mt-1 text-[11px] font-medium text-slate-600">
+        <div className="flex items-center justify-between mt-0.5 text-[10px] font-medium text-slate-600">
           <div className="flex flex-col gap-0.5">
             <span className="uppercase tracking-wider text-[10px] text-slate-400">
               Avg. Shipping Velocity Influence
@@ -97,7 +97,7 @@ export function ScoreBreakdownBar({ summary }: Props) {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {[
           {
             label: "PR Impact",
@@ -123,18 +123,18 @@ export function ScoreBreakdownBar({ summary }: Props) {
         ].map((stat) => (
           <div
             key={stat.label}
-            className="bg-slate-50/80 rounded-[16px] p-4 ring-1 ring-slate-900/5 flex flex-col gap-2"
+            className="bg-slate-50/80 rounded-[16px] p-3 ring-1 ring-slate-900/5 flex flex-col gap-1.5"
           >
             <span
-              className="text-[11px] font-semibold uppercase tracking-wider"
+              className="text-[10px] font-semibold uppercase tracking-wider"
               style={{ color: stat.color }}
             >
               {stat.label}
             </span>
-            <span className="text-2xl font-semibold text-slate-900 leading-none tabular-nums tracking-tight">
+            <span className="text-xl font-semibold text-slate-900 leading-none tabular-nums tracking-tight">
               {stat.value}
             </span>
-            <div className="flex items-center gap-2.5 mt-1">
+            <div className="flex items-center gap-2 mt-0.5">
               <MiniBar value={parseFloat(stat.value) || 0} color={stat.color} max={stat.max} />
               <span className="text-[10px] font-medium text-slate-500 shrink-0 tabular-nums">
                 {stat.sub}

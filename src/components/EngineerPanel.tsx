@@ -116,7 +116,7 @@ export function EngineerPanel({ engineers }: { engineers: { author_login: string
   const totalAreaPRs = areas.reduce((s, a) => s + a.n_prs, 0) || 1;
 
   return (
-    <section className="col-span-8 bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] flex flex-col min-h-0 overflow-hidden">
+    <section className="col-span-8 bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] flex flex-col min-h-[420px] overflow-hidden">
       <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
 
         {/* Header row */}

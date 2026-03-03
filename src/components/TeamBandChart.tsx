@@ -17,7 +17,7 @@ const ANALYTIC_COLORS =[
 export function TeamBandChart({ engineers }: Props) {
   if (!engineers.length) {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 shrink-0 flex items-center justify-center min-h-[200px] text-sm text-slate-400">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 shrink-0 flex items-center justify-center min-h-[160px] text-sm text-slate-400">
         No 90-day velocity data available.
       </div>
     );
@@ -48,22 +48,22 @@ export function TeamBandChart({ engineers }: Props) {
   const maxVal = Math.max(...allBars.map((b) => b.value), 1);
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 shrink-0 font-sans">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 shrink-0 font-sans">
       
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-4">
         <h2 className="text-sm font-semibold text-slate-900">
           Team Velocity
         </h2>
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-xs text-slate-500 mt-0.5">
           Last 90 days composite — top 5 vs. team average
         </p>
       </div>
 
       {/* Chart Area */}
-      <div className="mt-8">
+      <div className="mt-4">
         {/* Bars */}
-        <div className="flex items-end justify-between h-36 px-2 gap-4 sm:gap-8 border-b border-slate-200">
+        <div className="flex items-end justify-between h-28 px-2 gap-4 sm:gap-8 border-b border-slate-200">
           {allBars.map((b) => {
             const heightPercent = (b.value / maxVal) * 100 || 0;
             
@@ -90,7 +90,7 @@ export function TeamBandChart({ engineers }: Props) {
         </div>
 
         {/* X-Axis Labels */}
-        <div className="flex justify-between px-2 gap-4 sm:gap-8 pt-3">
+        <div className="flex justify-between px-2 gap-4 sm:gap-8 pt-2">
           {allBars.map((b) => (
             <div key={`${b.label}-axis`} className="flex-1 flex flex-col items-center">
               <span
