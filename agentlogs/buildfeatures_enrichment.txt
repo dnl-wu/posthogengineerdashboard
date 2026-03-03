@@ -1,0 +1,410 @@
+
+ ▐▛███▜▌   Claude Code v2.1.63
+▝▜█████▛▘  Sonnet 4.6 · Claude Pro
+  ▘▘ ▝▝    ~\weavedaniel
+
+❯ Read docs/plan.md + docs/schema.md first; do not rename tables/columns.   
+                                                                            
+  Implement scripts/build_features.ts using Supabase service-role client    
+  (no pg). Compute deterministic flow + touch hints only (no “impact”       
+  here). For PRs merged in last 120 days, upsert into pr_features:          
+                                                                            
+  - time_to_first_review_h                                                  
+  - time_to_merge_h                                                         
+  - review_cycles (count CHANGES_REQUESTED)                                 
+  - review_coverage (distinct reviewers)                                    
+  - has_description                                                         
+  - is_merge_to_main                                                        
+  - touches_frontend/backend/infra/tests (path-prefix config)               
+  - has_tests (glob config)                                                 
+  - size_bucket (routing/cap only)                                          
+  - code_churn_ratio                                                        
+  - total_comments_received = 0                                             
+                                                                            
+  Batch reads/upserts. Return only code (+ config).                         
+
+● Read 2 files (ctrl+o to expand)
+
+● Now let me explore the existing project structure.
+
+● Searched for 1 pattern, read 3 files (ctrl+o to expand)
+
+● Now let me read the existing scripts to understand the patterns:
+
+● Read 2 files (ctrl+o to expand)
+
+● Now I have a full picture. Let me check the existing enrich-pr.ts pattern and
+  the .env.local to make sure I match env var names:
+
+● Read 1 file (ctrl+o to expand)
+
+● Good. Now I'll create the migration and the script. The pr_features table
+  needs the new columns first:
+
+● Write(supabase\migrations\002_pr_features_extend.sql)
+  ⎿  Wrote 39 lines to supabase\migrations\002_pr_features_extend.sql
+     -- ===================================================================
+     ==========
+     -- 002_pr_features_extend.sql
+     -- Adds deterministic flow + touch-hint columns to pr_features.
+     -- Written by build_features.ts; read by score-prs.ts and 
+     enrich-pr.ts.
+     -- Safe to re-run: ADD COLUMN IF NOT EXISTS is idempotent.
+     -- ===================================================================
+     ==========
+
+     ALTER TABLE pr_features
+       -- ── Flow signals 
+     ────────────────────────────────────────────────────────
+       ADD COLUMN IF NOT EXISTS review_cycles           INT      NOT NULL
+     DEFAULT 0,
+     … +29 lines (ctrl+o to expand)
+
+● Write(scripts\build_features.ts)
+  ⎿  Wrote 333 lines to scripts\build_features.ts
+     /**
+      * build_features.ts
+      * ─────────────────
+      * Deterministic feature extraction — no LLM calls.
+      *
+      * For every PR merged within the last WINDOW_DAYS (default 120), 
+     reads
+      * `prs`, `pr_changed_files`, and `pr_reviews`, computes structural 
+     signals
+      * and touch hints, then upserts the result into `pr_features`.
+      *
+      * Tables read:    prs, pr_changed_files, pr_reviews
+     … +323 lines (ctrl+o to expand)
+
+● Now add the npm script entry:
+
+● Update(package.json)
+  ⎿  Added 1 line
+       7      "build": "next build",                                     
+       8      "start": "next start",                                     
+       9      "ingest": "tsx scripts/ingest_github.ts",                  
+      10 +    "features": "tsx scripts/build_features.ts",               
+      11      "build_features": "tsx scripts/enrich-pr.ts && tsx         
+          scripts/enrich-review.ts",                                     
+      12      "llm_enrich": "tsx scripts/enrich-pr.ts && tsx             
+          scripts/enrich-review.ts",                                     
+      13      "compute_scores": "tsx scripts/score-prs.ts && tsx         
+          scripts/score-reviews.ts",                                     
+
+● Let me do a quick sanity check on the output:
+
+● Bash(cd /c/Users/oneda/weavedaniel && npx tsc --noEmit --skipLibCheck 2>&1 |
+      head -40)
+  ⎿  scripts/build_features.ts(182,30): error TS2802: Type 'Set<string>' ca
+     n only be iterated through when using the '--downlevelIteration' flag
+     or with a '--target' of 'es2015' or higher.
+
+● Update(scripts\build_features.ts)
+  ⎿  Added 1 line, removed 1 line
+      179                                                                
+      180    // Subsystems: distinct top-level dirs from changed files   
+      181    const subsystemSet = new Set(filenames.map(topLevelDir));   
+      182 -  const subsystem_list = [...subsystemSet].sort();            
+      182 +  const subsystem_list = Array.from(subsystemSet).sort();     
+      183                                                                
+      184    // Churn ratio: deletions / total lines; null when no lines 
+            changed                                                      
+      185    const totalLines = pr.additions + pr.deletions;             
+
+● Bash(cd /c/Users/oneda/weavedaniel && npx tsc --noEmit --skipLibCheck 2>&1)
+  ⎿  (No output)
+
+● Clean. Here's what was produced:
+
+  ---
+  supabase/migrations/002_pr_features_extend.sql
+  Idempotent ALTER TABLE pr_features ADD COLUMN IF NOT EXISTS for the eleven new
+   columns. Run this against Supabase before the first npm run features.
+
+  scripts/build_features.ts — key decisions:
+
+  Field: cycle_time_hours
+  Source: prs.created_at → merged_at
+  Notes: rounded to 2 dp
+  ────────────────────────────────────────
+  Field: review_lag_hours
+  Source: prs.created_at → min(pr_reviews.submitted_at)
+  Notes: null if no reviews
+  ────────────────────────────────────────
+  Field: review_cycles
+  Source: COUNT(state='CHANGES_REQUESTED')
+  Notes:
+  ────────────────────────────────────────
+  Field: review_coverage
+  Source: COUNT(DISTINCT reviewer_login)
+  Notes:
+  ────────────────────────────────────────
+  Field: has_description
+  Source: body?.trim().length > 0
+  Notes:
+  ────────────────────────────────────────
+  Field: is_merge_to_main
+  Source: hard-coded true
+  Notes: base_ref not in prs schema; all PostHog PRs merge to main
+  ────────────────────────────────────────
+  Field: touches_*
+  Source: TOUCH_PREFIXES config object
+  Notes: filenames.some(f => f.startsWith(prefix)), case-insensitive
+  ────────────────────────────────────────
+  Field: has_tests
+  Source: TEST_FILE_REGEXES
+  Notes: covers .test.ts, .spec.ts, test_*.py, *_test.go, __tests__/ dirs
+  ────────────────────────────────────────
+  Field: size_bucket
+  Source: additions + deletions
+  Notes: XS/S/M/L/XL; thresholds 10/100/500/1000
+  ────────────────────────────────────────
+  Field: churn_ratio
+  Source: deletions / (additions + deletions)
+  Notes: null if 0 lines
+  ────────────────────────────────────────
+  Field: total_comments_received
+  Source: 0
+  Notes: stub; filled by a later worker
+
+  Batching: reads prs 200 at a time, parallel-fetches files + reviews for each
+  page, then upserts pr_features 50 rows at a time.
+
+  Config (all inline, easy to tune): TOUCH_PREFIXES, TEST_FILE_REGEXES,
+  sizeBucket thresholds, WINDOW_DAYS / READ_BATCH / UPSERT_BATCH.
+
+  Run with:
+  npm run features
+
+✻ Cogitated for 4m 41s
+
+❯ Read docs/plan.md + docs/schema.md first; follow the                      
+  qualitative→quantitative contract.                                        
+                                                                            
+  Implement scripts/llm_enrich_prs.ts using Supabase service-role + Gemini  
+  API. No diffs, no comment text. Build a compact PR context packet (title, 
+   body_excerpt<=1200, labels, base_branch, top30 file_paths, touch_hints,  
+  has_tests, size_bucket). Cache by input_hash (sha256 of normalized        
+  input). Skip if unchanged.                                                
+                                                                            
+  Gemini must return STRICT JSON:                                           
+  {                                                                         
+    primary_product, secondary_products[],                                  
+    type: feat|fix|chore|ci,                                                
+    user_facing: bool,                                                      
+    impact_score_0_10: number,                                              
+    confidence_0_1: number,                                                 
+    impact_drivers[], one_liner                                             
+  }                                                                         
+  Constrain primary_product to your allowed PostHog product slugs. Store    
+  prompt_version + model_name + raw_response. Map into pr_llm_features      
+  deterministically (type→category, impact_score→impact_signal,             
+  size_bucket→complexity as secondary). Retry once on invalid JSON;         
+  fallback_used=true on API failure.                                        
+                                                                            
+  Return only code + the exact Gemini prompt template string.               
+
+● Read 2 files (ctrl+o to expand)
+
+● Now let me read the existing scripts and the migration I already wrote to
+  understand the full state:
+
+● Read 2 files (ctrl+o to expand)
+  ⎿  API Error: Claude's response exceeded the 32000 output token maximum. To 
+     configure this behavior, set the CLAUDE_CODE_MAX_OUTPUT_TOKENS environment 
+     variable.
+
+● Now I have everything I need. Let me write the migration and the script
+  cleanly:
+
+● Write(supabase\migrations\003_pr_llm_features_extend.sql)
+  ⎿  Wrote 32 lines to supabase\migrations\003_pr_llm_features_extend.sql
+     -- ===================================================================
+     ==========
+     -- 003_pr_llm_features_extend.sql
+     -- Adds new Gemini output columns to pr_llm_features.
+     -- Written by llm_enrich_prs.ts; read by score-prs.ts.
+     -- Safe to re-run: ADD COLUMN IF NOT EXISTS is idempotent.
+     -- ===================================================================
+     ==========
+
+     ALTER TABLE pr_llm_features
+       -- ── Product classification 
+     ────────────────────────────────────────────────
+       ADD COLUMN IF NOT EXISTS primary_product      TEXT,
+     … +22 lines (ctrl+o to expand)
+
+● Write(scripts\llm_enrich_prs.ts)
+  ⎿  Wrote 720 lines to scripts\llm_enrich_prs.ts
+     /**
+      * llm_enrich_prs.ts
+      * ─────────────────
+      * LLM enrichment for merged PRs using Gemini.
+      * No diffs, no comment text — compact context packet only.
+      *
+      * Pipeline position:
+      *   build_features.ts  →  llm_enrich_prs.ts  →  score-prs.ts
+      *
+      * Tables read:    prs, pr_features, pr_changed_files, pr_llm_features 
+     (existing hashes)
+
+     … +710 lines (ctrl+o to expand)
+
+● That log line in the batch is mangled. Let me fix it and run the type check:
+
+● Update(scripts\llm_enrich_prs.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      701                                                                
+      702      totalEnriched += outputRows.length;                       
+      703      console.log(                                              
+      704 -      `  … enriched=${outputRows.length}                      
+          -skipped_this_batch=${todo.length - outputRows.length +        
+          -(prs.length - todo.length - totalSkipped + (totalSkipped -    
+          -(totalSkipped - (prs.length - todo.length - (prs.length -     
+          -pfByPr.size)))))} ` +                                         
+      705 -      `|                                                      
+          -total: enriched=${totalEnriched} skipped=${totalSkipped}      
+          - fallback=${totalFallback}`,                                  
+      704 +      `  … enriched=${outputRows.length}                      
+          +(fallback=${totalFallback}) ` +                               
+      705 +      `| running                                              
+          +total: enriched=${totalEnriched} skipped=${totalSkipped}`,    
+      706      );                                                        
+      707                                                                
+      708      offset += prs.length;                                     
+
+● Bash(cd /c/Users/oneda/weavedaniel && npx tsc --noEmit --skipLibCheck 2>&1)
+  ⎿  Error: Exit code 2
+     scripts/llm_enrich_prs.ts(619,21): error TS2352: Conversion of type 
+     'GenericStringError[]' to type 'PrFeatureRow[]' may be a mistake because 
+     neither type sufficiently overlaps with the other. If this was intentional,
+      convert the expression to 'unknown' first.
+       Type '{ error: true; } & String' is missing the following properties from
+      type 'PrFeatureRow': pr_id, n_subsystems_touched, touches_frontend, 
+     touches_backend, and 4 more.
+
+     scripts/llm_enrich_prs.ts(619,21): error TS2352: Conversion of type 
+     'GenericStringError[]' to type 'PrFeatureRow[]' may be a mistake because 
+     neither type sufficiently overlaps with the other. If this was intentional,
+      convert the expression to 'unknown' first.
+       Type '{ error: true; } & String' is missing the following properties from
+      type 'PrFeatureRow': pr_id, n_subsystems_touched, touches_frontend, 
+     touches_backend, and 4 more.
+
+
+
+
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(scripts\llm_enrich_prs.ts)
+  ⎿  Added 1 line, removed 1 line
+      616                                                                
+      617      // Index supporting rows by pr_id                         
+      618      const pfByPr = new Map<number, PrFeatureRow>();           
+      619 -    for (const r of (pfRes.data ?? []) as                     
+          -PrFeatureRow[]) pfByPr.set(r.pr_id, r);                       
+      619 +    for (const r of (pfRes.data ?? []) as unknown as          
+          +PrFeatureRow[]) pfByPr.set(r.pr_id, r);                       
+      620                                                                
+      621      const filesByPr = new Map<number, string[]>();            
+      622      for (const r of (filesRes.data ?? []) as { pr_id: number; 
+            filename: string }[]) {                                      
+
+● Bash(cd /c/Users/oneda/weavedaniel && npx tsc --noEmit --skipLibCheck 2>&1)
+  ⎿  (No output)
+
+● Clean. Now add the npm script and verify the final file is coherent:
+
+● Update(package.json)
+  ⎿  Added 1 line
+       8      "start": "next start",                                     
+       9      "ingest": "tsx scripts/ingest_github.ts",                  
+      10      "features": "tsx scripts/build_features.ts",               
+      11 +    "llm_enrich": "tsx scripts/llm_enrich_prs.ts",             
+      12      "build_features": "tsx scripts/enrich-pr.ts && tsx         
+          scripts/enrich-review.ts",                                     
+      13      "llm_enrich": "tsx scripts/enrich-pr.ts && tsx             
+          scripts/enrich-review.ts",                                     
+      14      "compute_scores": "tsx scripts/score-prs.ts && tsx         
+          scripts/score-reviews.ts",                                     
+
+● Here's what was produced and the key decisions behind each piece:
+
+  ---
+  supabase/migrations/003_pr_llm_features_extend.sql
+
+  Adds 7 new columns to pr_llm_features — all IF NOT EXISTS, idempotent:
+  primary_product, secondary_products, impact_signal, confidence,
+  impact_drivers, one_liner, fallback_used.
+
+  ---
+  scripts/llm_enrich_prs.ts
+
+  Prompt template (SYSTEM_PROMPT — bumping PROMPT_VERSION = "1.0.0" forces full
+  re-enrichment):
+  You are a senior PostHog engineer classifying a pull request for an
+  engineering velocity dashboard.
+  Respond with ONLY a valid JSON object — no markdown fences, no prose, no
+  trailing commas.
+
+  Allowed slugs for primary_product and secondary_products:
+  analytics | session_replay | feature_flags | experiments | data_pipelines |
+  cdp |
+  surveys | error_tracking | web_analytics | llm_observability | billing | auth
+  | infra | platform
+
+  Return exactly this JSON shape:
+  {
+    "primary_product":    <string — one slug; best-fit product area>,
+    "secondary_products": <array of 0–3 slugs; other products meaningfully
+  touched>,
+    "type":               <"feat" | "fix" | "chore" | "ci">,
+    "user_facing":        <boolean>,
+    "impact_score_0_10":  <number 0.0–10.0, one decimal>,
+    "confidence_0_1":     <number 0.00–1.00>,
+    "impact_drivers":     <array of 1–4 short strings>,
+    "one_liner":          <string ≤ 120 chars>
+  }
+
+  Key design decisions:
+
+  ┌───────────────────────┬──────────────────────────────────────────────────┐
+  │        Concern        │                     Decision                     │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │                       │ SHA-256 of JSON.stringify(InputPacket) —         │
+  │ Cache                 │ deterministic because packet keys are            │
+  │                       │ insertion-ordered; skip if prompt_version +      │
+  │                       │ input_hash both match                            │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │                       │ title + body≤1200 + sorted labels + "main"       │
+  │ Context packet        │ base_branch + top-30 sorted filenames + 4        │
+  │                       │ boolean touch hints + size_bucket                │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │ No diffs/comments     │ Only filenames in context — keeps tokens low,    │
+  │                       │ caching stable                                   │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │                       │ GeminiParseError → one retry with explicit JSON  │
+  │ Retry                 │ reminder appended; GeminiApiError → immediate    │
+  │                       │ fallback                                         │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │                       │ Writes a neutral row (impact_signal=3.0,         │
+  │ fallback_used=true    │ confidence=0.0, all scores from size_bucket) so  │
+  │                       │ score-prs.ts can apply a floor rather than       │
+  │                       │ skipping the PR entirely                         │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │                       │ feat→feature, fix→bug_fix, ci→infra,             │
+  │ type→category mapping │ chore→disambiguated by                           │
+  │                       │ has_tests/touches_infra/product slug             │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │ complexity_score      │ 0.7 × impact_base + 0.3 × size_bucket_score —    │
+  │                       │ Gemini drives it, size is secondary as specified │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │ touches_critical_path │ primary_product ∈ {billing, auth,                │
+  │                       │ data_pipelines} or same for any secondary        │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │ Concurrency           │ GEMINI_MAX_CONCURRENT (default 5) iterator-pool  │
+  │                       │ pattern                                          │
+  └───────────────────────┴──────────────────────────────────────────────────┘
+
+✻ Sautéed for 14m 32s

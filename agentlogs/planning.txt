@@ -1,0 +1,214 @@
+
+ ▐▛███▜▌   Claude Code v2.1.63
+▝▜█████▛▘  Sonnet 4.6 · Claude Pro
+  ▘▘ ▝▝    ~\weavedaniel
+
+❯ You are a senior systems engineer!                                        
+                                                                            
+  Task: produce an architecture + data contract for an “Engineering         
+  Velocity / Impact” dashboard for the PostHog/posthog GitHub repo.         
+                                                                            
+  Hard requirements:                                                        
+  - Window: last 90 days (backfill 120 days for safety).                    
+  - Avoid vanity metrics (#commits/LOC/#files) as primary drivers.          
+  - Use Gemini to convert PR context (title/body/labels + file paths +      
+  touch hints) into quantitative fields usable in a deterministic scoring   
+  system.                                                                   
+  - PR scoring and Review scoring must be separate components, with PRs     
+  weighted higher.                                                          
+  - The UI must clearly compare top engineers vs the rest of the team using 
+   a team P25–P75 distribution band over time.                              
+  - All worker scripts and server routes must use                           
+  SUPABASE_SERVICE_ROLE_KEY. Never expose it in the browser; UI reads       
+  through Next.js API routes.                                               
+                                                                            
+  Deliverable:                                                              
+  - Write a single markdown file at docs/plan.md containing:                
+    1) System overview (ingest → features → LLM enrich → scoring → API →    
+  UI)                                                                       
+    2) Data contracts: what each pipeline stage reads/writes                
+    3) API contracts: /api/leader                                           
+
+● Recalled 1 memory, read 1 file (ctrl+o to expand)
+
+● Bash(mkdir -p /c/Users/oneda/weavedaniel/docs)
+  ⎿  Done
+
+● Write(docs\plan.md)
+  ⎿  Wrote 793 lines to ..\..\..\c\Users\oneda\weavedaniel\docs\plan.md
+     # Engineering Velocity / Impact Dashboard — Architecture & Data
+     Contract
+
+     > **Repo target:** PostHog/posthog
+     > **Window:** last 90 days (120-day backfill on first run)
+     > **Stack:** GitHub REST/GraphQL API · Gemini API · Supabase (Postgres
+     + pgvector) · Next.js 14 (App Router) · tRPC-optional
+
+     ---
+
+     ## 1. System Overview
+
+
+     … +783 lines (ctrl+o to expand)
+
+● Written to docs/plan.md. Here's what the document covers:
+
+  ---
+  Section 1 — System Overview
+  Five-layer pipeline shown as an ASCII block diagram:
+  - github-ingest.ts → pulls PRs + files + reviews from GitHub REST API into
+  raw_prs / raw_reviews
+  - enrich-pr.ts / enrich-review.ts → single Gemini Flash 2.0 call per row,
+  structured JSON output, writes to pr_features / review_features
+  - score-prs.ts / score-reviews.ts + rollup.ts → fully deterministic math, no
+  LLM, writes pr_scores → engineer_weekly_scores
+  - Next.js API routes → only place SUPABASE_SERVICE_ROLE_KEY is used; browser
+  never touches Supabase
+  - UI components → read exclusively from /api/*
+
+  Section 2 — Data Contracts
+  Seven tables with full CREATE TABLE DDL, indexes, and shape definitions for
+  every JSONB column. Also includes the exact Gemini prompt templates (system +
+  user) for both PR and review enrichment, with the JSON schema the model must
+  emit.
+
+  Section 3 — API Contracts
+  Three routes with full request/response JSON shapes:
+  - GET /api/leaderboard — ranked engineers + per-week P25/P50/P75 team band
+  - GET /api/engineer/[login] — individual drill-down with weekly timeline and
+  top PRs
+  - GET /api/prs/[login] — paginated PR list with every score dimension exposed
+
+  Section 4 — Scoring Formulas
+  Authoritative, reproducible formulas for raw_pr_score (impact/delivery/breadth
+   sub-scores × category weight), raw_review_score (quality + engagement
+  bonuses), and the 0.70/0.30 weekly composite. PRs are weighted ~2.3× heavier
+  than reviews by design.
+
+  Sections 5–7 cover environment variable segregation (service-role key is
+  strictly server-env, no NEXT_PUBLIC_ prefix), cron/worker schedule, and the UI
+   component map.
+
+✻ Crunched for 2m 47s
+
+❯ Read docs/plan.md first and follow it exactly. Do not invent new          
+  endpoints or change names midstream.                                      
+                                                                            
+  Task: define the Supabase Postgres schema to support the pipeline and     
+  dashboard, and store it in markdown for auditability.                     
+                                                                            
+  Deliverables:                                                             
+  1) Write docs/schema.md:                                                  
+     - list each table with purpose and key columns                         
+     - primary keys + unique constraints for upserts                        
+     - indexes for the hot queries                                          
+  2) Create a Supabase migration SQL file at                                
+  supabase/migrations/001_initial.sql.                                      
+                                                                            
+  Tables needed (minimum):                                                  
+  - prs                                                                     
+  - pr_changed_files                                                        
+  - pr_reviews                                                              
+  - pr_features (deterministic flow + touch hints)                          
+  - pr_llm_features (Gemini outputs + cache key + prompt_version +          
+  model_name)                                                               
+  - engineer_scores_90d                                                     
+  - engineer_weekly_velocity                                                
+  - team_weekly_velocity (mean + p25/p50/p75)                               
+  - engineer_evidence                                                       
+  - engineer_areas                                                          
+                                                                            
+  Notes:                                                                    
+  - Keep schema MVP-lean: do not create comment tables for now.             
+  - Include prompt_version + model_name + input_hash in pr_llm_features for 
+   auditability.                                                            
+  - Do not include bot detection fields.                                    
+                                                                            
+  Output only the file cont                                                 
+
+● Read 1 file (ctrl+o to expand)
+
+● Now I have a thorough read of plan.md. Let me map the task's table names
+  against the plan's data contracts, then write both files.
+
+● Bash(mkdir -p /c/Users/oneda/weavedaniel/supabase/migrations)
+  ⎿  Done
+
+● Write(docs\schema.md)
+  ⎿  Wrote 441 lines to ..\..\..\c\Users\oneda\weavedaniel\docs\schema.md
+     # Database Schema — Engineering Velocity / Impact Dashboard
+
+     > Supabase Postgres (pg 15).
+     > All tables live in the `public` schema.
+     > All write operations use `SUPABASE_SERVICE_ROLE_KEY` (server-side 
+     workers + Next.js API routes only).
+     > Migration file: `supabase/migrations/001_initial.sql`
+
+     ---
+
+     ## Table Inventory
+     … +431 lines (ctrl+o to expand)
+
+● Write(supabase\migrations\001_initial.sql)
+  ⎿  Wrote 433 lines to
+     ..\..\..\c\Users\oneda\weavedaniel\supabase\migrations\001_initial.sql
+     -- ===================================================================
+     ==========
+     -- 001_initial.sql
+     -- Engineering Velocity / Impact Dashboard — PostHog/posthog
+     -- ===================================================================
+     ==========
+     -- All objects use IF NOT EXISTS so the script is safe to re-run in 
+     dev.
+     -- Tables are created in dependency order (parents before FK 
+     children).
+     -- Service-role access assumed; no RLS policies required for worker 
+     tables.
+     -- ===================================================================
+     ==========
+
+
+     … +423 lines (ctrl+o to expand)
+
+● Both files are written. Here's a summary of every decision made:
+
+  ---
+  docs/schema.md — 13 tables documented with purpose, column-by-column notes,
+  PKs, unique constraints, and index rationale.
+
+  supabase/migrations/001_initial.sql — runnable migration, safe to re-run (IF 
+  NOT EXISTS throughout), creation order respects all FK dependencies.
+
+  ---
+  Key design decisions
+
+  Plan.md names preserved exactly where they already existed (pr_scores,
+  review_scores, pr_features). The task's requested names take precedence for
+  the new split: engineer_weekly_velocity (plan called it
+  engineer_weekly_scores), engineer_scores_90d, team_weekly_velocity,
+  engineer_evidence, engineer_areas.
+
+  pr_features vs pr_llm_features split — pr_features holds only deterministic
+  structural signals (churn_ratio, cycle_time_hours, review_lag_hours,
+  subsystem_list, counts). pr_llm_features holds everything Gemini produces plus
+   the three auditability columns: model_name, prompt_version, input_hash
+  (SHA-256 of the exact prompt user-turn). The cache index on (prompt_version, 
+  input_hash) lets the enrichment worker skip re-calling Gemini when the prompt
+  and input haven't changed.
+
+  review_llm_features added — not in the minimum list but required by the
+  pipeline described in plan.md; score-reviews.ts has nothing to read without
+  it.
+
+  pr_changed_files normalised out — prs no longer holds files_json; the GitHub
+  files array maps to rows, enabling set-based subsystem extraction in SQL
+  rather than JSON parsing in application code.
+
+  team_weekly_velocity materialises the P25/P50/P75 band so /api/leaderboard
+  reads a pre-computed row per week rather than calling percentile_cont() over
+  engineer_weekly_velocity on every request.
+
+  engineer_scores_90d — single row per engineer, replaced each rollup run. Gives
+   the /api/leaderboard a constant-time read for the ranked table.
+
+✻ Sautéed for 5m 31s

@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-figtree: "Figtree", sans-serif;
+  }
+  body {
+    font-family: var(--font-figtree, sans-serif);
+  }
+}

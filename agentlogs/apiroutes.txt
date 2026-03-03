@@ -1,0 +1,291 @@
+
+ ▐▛███▜▌   Claude Code v2.1.63
+▝▜█████▛▘  Sonnet 4.6 · Claude Pro
+  ▘▘ ▝▝    ~\weavedaniel
+
+❯ Ok, referencin docs/plan.md and schema.md                                 
+                                                                            
+  Implement next.js router api routes using server-only supabase client     
+                                                                            
+  - GET /api/leaderboard (top 5 from engineer_scores_90d)                   
+  - GET /api/velocity (team_weekly_velocity mean+p25+p50+p75 + top5         
+  engineer series from engineer_weekly_velocity; support ?focus=login)      
+  - GET /api/engineer/[login] (scores + evidence + areas + weekly series)   
+                                                                            
+  Return only code.                                                         
+
+● Read 2 files (ctrl+o to expand)
+
+● Let me check the existing project structure.
+
+● Searched for 4 patterns, read 4 files (ctrl+o to expand)
+
+● Write(src\lib\supabase-server.ts)
+  ⎿  Wrote 9 lines to src\lib\supabase-server.ts
+     import { createClient } from '@supabase/supabase-js'
+
+     export function createSupabaseServer() {
+       return createClient(
+         process.env.NEXT_PUBLIC_SUPABASE_URL!,
+         process.env.SUPABASE_SERVICE_ROLE_KEY!,
+         { auth: { persistSession: false } },
+       )
+     }
+
+
+● Write(src\app\api\leaderboard\route.ts)
+  ⎿  Added 20 lines, removed 15 lines
+       1  // GET /api/leaderboard                                        
+       2 -// Returns ranked engineers + team distribution band.          
+       3 -// See docs/plan.md §3.1 for full response contract.           
+       4 -import { createSupabaseServer } from "@/lib/supabase-server";  
+       5 -import { NextRequest } from "next/server";                     
+       2 +// Top 5 engineers by raw_composite from engineer_scores_90d.  
+       3 +import { createSupabaseServer } from '@/lib/supabase-server'   
+       4 +import { NextRequest } from 'next/server'                      
+       5                                                                 
+       6 -export async function GET(req: NextRequest) {                  
+       7 -  const { searchParams } = req.nextUrl;                        
+       8 -  const days   = Math.min(parseInt(searchParams.get("days")    
+         -?? "90"),  120);                                               
+       9 -  const limit  = Math.min(parseInt(searchParams.get("limit")   
+         -?? "30"),  100);                                               
+      10 -  const offset =           parseInt(searchParams.get("offset") 
+         - ?? "0");                                                      
+       6 +export async function GET(_req: NextRequest) {                 
+       7 +  const supabase = createSupabaseServer()                      
+       8                                                                 
+       9 -  if (days < 1) {                                              
+      10 -    return Response.json({ error: "days must be between 1 and  
+         -120" }, { status: 400 });                                      
+       9 +  const { data, error } = await supabase                       
+      10 +    .from('engineer_scores_90d')                               
+      11 +    .select(                                                   
+      12 +      'author_login, n_prs_merged, avg_pr_score,               
+         +n_reviews_given, avg_review_score, raw_composite,              
+         +avg_percentile, rank, computed_at',                            
+      13 +    )                                                          
+      14 +    .order('raw_composite', { ascending: false })              
+      15 +    .limit(5)                                                  
+      16 +                                                               
+      17 +  if (error) {                                                 
+      18 +    console.error('[leaderboard]', error)                      
+      19 +    return Response.json({ error: 'internal server error' }, { 
+         + status: 500 })                                                
+      20    }                                                            
+      21                                                                 
+      22 -  const supabase = createSupabaseServer();                     
+      23 -  void supabase; // TODO: implement query                      
+      24 -                                                               
+      25 -  return Response.json({ error: "not implemented" }, { status: 
+         - 501 });                                                       
+      22 +  return Response.json({                                       
+      23 +    engineers: data ?? [],                                     
+      24 +    generated_at: new Date().toISOString(),                    
+      25 +  })                                                           
+      26  }                                                              
+
+● Write(src\app\api\velocity\route.ts)
+  ⎿  Wrote 83 lines to src\app\api\velocity\route.ts
+     // GET /api/velocity
+     // team_weekly_velocity band (mean + p25/p50/p75) + top-5 engineer 
+     weekly series.
+     // ?focus=<login>  optionally includes a specific engineer's series 
+     alongside top-5.
+     // ?days=<int>     look-back window, default 90, max 120.
+     import { createSupabaseServer } from '@/lib/supabase-server'
+     import { NextRequest } from 'next/server'
+
+     export async function GET(req: NextRequest) {
+       const { searchParams } = req.nextUrl
+       const days = Math.min(parseInt(searchParams.get('days') ?? '90'),
+     120)
+     … +73 lines (ctrl+o to expand)
+
+● Write(src\app\api\engineer\[login]\route.ts)
+  ⎿  Added 118 lines, removed 11 lines
+        1  // GET /api/engineer/[login]                                  
+        2 -// Single-engineer drill-down: full weekly timeline + top     
+          -PRs.                                                          
+        3 -// See docs/plan.md §3.2 for full response contract.          
+        4 -import { createSupabaseServer } from "@/lib/supabase-server"; 
+        5 -import { NextRequest } from "next/server";                    
+        2 +// Single-engineer drill-down: 90d scores + weekly series     
+          +(with team band) + evidence + areas.                          
+        3 +import { createSupabaseServer } from '@/lib/supabase-server'  
+        4 +import { NextRequest } from 'next/server'                     
+        5                                                                
+        6 +const GITHUB_REPO = process.env.NEXT_PUBLIC_GITHUB_REPO ??    
+          +'PostHog/posthog'                                             
+        7 +                                                              
+        8  export async function GET(                                    
+        9    req: NextRequest,                                           
+       10    { params }: { params: { login: string } },                  
+       11  ) {                                                           
+       12 -  const login = params.login.toLowerCase();                   
+       13 -  const { searchParams } = req.nextUrl;                       
+       14 -  const days = Math.min(parseInt(searchParams.get("days") ?? "
+          -90"), 120);                                                   
+       12 +  const login = params.login.toLowerCase()                    
+       13 +  const { searchParams } = req.nextUrl                        
+       14 +  const days = Math.min(parseInt(searchParams.get('days') ?? '
+          +90'), 120)                                                    
+       15                                                                
+       16    if (days < 1) {                                             
+       17 -    return Response.json({ error: "                           
+          -days must be between 1 and 120" }, { status: 400 });          
+       17 +    return Response.json({ error: '                           
+          +days must be between 1 and 120' }, { status: 400 })           
+       18    }                                                           
+       19                                                                
+       20 -  const supabase = createSupabaseServer();                    
+       21 -  void supabase; void login; // TODO: implement query         
+       20 +  const from = new Date()                                     
+       21 +  from.setDate(from.getDate() - days)                         
+       22 +  const fromISO = from.toISOString().slice(0, 10)             
+       23                                                                
+       24 -  return Response.json({ error: "not implemented" }, {        
+          -status: 501 });                                               
+       24 +  const supabase = createSupabaseServer()                     
+       25 +                                                              
+       26 +  // 1. 90-day aggregate                                      
+       27 +  const { data: score90, error: scoreErr } = await supabase   
+       28 +    .from('engineer_scores_90d')                              
+       29 +    .select('*')                                              
+       30 +    .ilike('author_login', login)                             
+       31 +    .maybeSingle()                                            
+       32 +                                                              
+       33 +  if (scoreErr) {                                             
+       34 +    console.error('[engineer/score]', scoreErr)               
+       35 +    return Response.json({ error: 'internal server error' },  
+          +{ status: 500 })                                              
+       36 +  }                                                           
+       37 +                                                              
+       38 +  if (!score90) {                                             
+       39 +    return Response.json({ error: 'engineer not found' }, {   
+          +status: 404 })                                                
+       40 +  }                                                           
+       41 +                                                              
+       42 +  // 2. Weekly series + team band (parallel)                  
+       43 +  const [                                                     
+       44 +    { data: weekly, error: weeklyErr },                       
+       45 +    { data: teamBand, error: bandErr },                       
+       46 +    { data: evidence, error: evidenceErr },                   
+       47 +    { data: areas, error: areasErr },                         
+       48 +  ] = await Promise.all([                                     
+       49 +    supabase                                                  
+       50 +      .from('engineer_weekly_velocity')                       
+       51 +      .select(                                                
+       52 +        'week_start, raw_composite, avg_pr_score,             
+          +avg_review_score, n_prs_merged, n_reviews, team_percentile',  
+       53 +      )                                                       
+       54 +      .ilike('author_login', login)                           
+       55 +      .gte('week_start', fromISO)                             
+       56 +      .order('week_start', { ascending: true }),              
+       57 +                                                              
+       58 +    supabase                                                  
+       59 +      .from('team_weekly_velocity')                           
+       60 +      .select('week_start, p25_composite, p50_composite,      
+          +p75_composite')                                               
+       61 +      .gte('week_start', fromISO)                             
+       62 +      .order('week_start', { ascending: true }),              
+       63 +                                                              
+       64 +    // 3. Evidence: top 10 notable PRs                        
+       65 +    supabase                                                  
+       66 +      .from('engineer_evidence')                              
+       67 +      .select('pr_id, evidence_type, raw_pr_score,            
+          +week_start, prs(number, title, merged_at, repo)')             
+       68 +      .ilike('author_login', login)                           
+       69 +      .order('raw_pr_score', { ascending: false })            
+       70 +      .limit(10),                                             
+       71 +                                                              
+       72 +    // 4. Areas of specialisation                             
+       73 +    supabase                                                  
+       74 +      .from('engineer_areas')                                 
+       75 +      .select('area, n_prs, n_files_touched,                  
+          +last_touched_at')                                             
+       76 +      .ilike('author_login', login)                           
+       77 +      .order('n_prs', { ascending: false }),                  
+       78 +  ])                                                          
+       79 +                                                              
+       80 +  if (weeklyErr || bandErr || evidenceErr || areasErr) {      
+       81 +    const err = weeklyErr ?? bandErr ?? evidenceErr ??        
+          +areasErr                                                      
+       82 +    console.error('[engineer/parallel]', err)                 
+       83 +    return Response.json({ error: 'internal server error' },  
+          +{ status: 500 })                                              
+       84 +  }                                                           
+       85 +                                                              
+       86 +  // Merge team band into weekly rows by week_start           
+       87 +  const bandByWeek = Object.fromEntries(                      
+       88 +    (teamBand ?? []).map(r => [r.week_start, r]),             
+       89 +  )                                                           
+       90 +  const weeklySeries = (weekly ?? []).map(w => ({             
+       91 +    ...w,                                                     
+       92 +    team_p25: bandByWeek[w.week_start]?.p25_composite ??      
+          +null,                                                         
+       93 +    team_p50: bandByWeek[w.week_start]?.p50_composite ??      
+          +null,                                                         
+       94 +    team_p75: bandByWeek[w.week_start]?.p75_composite ??      
+          +null,                                                         
+       95 +  }))                                                         
+       96 +                                                              
+       97 +  // Shape evidence rows                                      
+       98 +  const formattedEvidence = (evidence ?? []).map(e => {       
+       99 +    const pr = Array.isArray(e.prs) ? e.prs[0] : e.prs        
+      100 +    return {                                                  
+      101 +      pr_id: e.pr_id,                                         
+      102 +      pr_number: pr?.number ?? null,                          
+      103 +      title: pr?.title ?? null,                               
+      104 +      merged_at: pr?.merged_at ?? null,                       
+      105 +      evidence_type: e.evidence_type,                         
+      106 +      raw_pr_score: e.raw_pr_score,                           
+      107 +      week_start: e.week_start,                               
+      108 +      github_url: pr                                          
+      109 +        ? `https://github.com/${pr.repo ??                    
+          +GITHUB_REPO}/pull/${pr.number}`                               
+      110 +        : null,                                               
+      111 +    }                                                         
+      112 +  })                                                          
+      113 +                                                              
+      114 +  return Response.json({                                      
+      115 +    engineer: { login: score90.author_login },                
+      116 +    summary: {                                                
+      117 +      n_prs: score90.n_prs_merged,                            
+      118 +      n_reviews: score90.n_reviews_given,                     
+      119 +      avg_pr_score: score90.avg_pr_score,                     
+      120 +      avg_review_score: score90.avg_review_score,             
+      121 +      composite_score: score90.raw_composite,                 
+      122 +      avg_percentile: score90.avg_percentile,                 
+      123 +      rank: score90.rank,                                     
+      124 +    },                                                        
+      125 +    weekly: weeklySeries,                                     
+      126 +    evidence: formattedEvidence,                              
+      127 +    areas: areas ?? [],                                       
+      128 +    generated_at: new Date().toISOString(),                   
+      129 +  })                                                          
+      130  }                                                             
+
+● Four files written:
+
+  src/lib/supabase-server.ts — creates the service-role client (never exposed to
+   browser since SUPABASE_SERVICE_ROLE_KEY has no NEXT_PUBLIC_ prefix).
+
+  GET /api/leaderboard — queries engineer_scores_90d ordered by raw_composite 
+  DESC, returns top 5.
+
+  GET /api/velocity — three parallel-ish queries:
+  - team_weekly_velocity → band rows (mean, p25/p50/p75, n_active)
+  - engineer_scores_90d → top-5 logins
+  - engineer_weekly_velocity → weekly series for those 5 (+ ?focus=<login> if
+  not already in top 5)
+  - Response groups series by login under engineer_series
+
+  GET /api/engineer/[login] — four parallel queries:
+  - engineer_scores_90d → 90-day summary (404 if missing)
+  - engineer_weekly_velocity → weekly rows merged with team band
+  (team_p25/p50/p75)
+  - engineer_evidence joined to prs → top-10 notable PRs with github_url
+  - engineer_areas → subsystem specialisation
+
+✻ Cooked for 2m 9s
