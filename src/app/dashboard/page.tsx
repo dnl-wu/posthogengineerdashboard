@@ -8,12 +8,13 @@ import type { LeaderboardEngineer, TeamBandRow } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  searchParams: { days?: string; focus?: string };
+  searchParams: Promise<{ days?: string; focus?: string }>;
 }
 
 export default async function DashboardPage({ searchParams }: PageProps) {
-  const days = Math.min(parseInt(searchParams.days ?? "90"), 120);
-  const focus = searchParams.focus?.toLowerCase() ?? null;
+  const resolvedParams = await searchParams;
+  const days = Math.min(parseInt(resolvedParams.days ?? "90"), 120);
+  const focus = resolvedParams.focus?.toLowerCase() ?? null;
 
   const from = new Date();
   from.setDate(from.getDate() - days);
